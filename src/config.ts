@@ -1,4 +1,4 @@
-import type { AccountProfile, Capability, Provider } from "./types.js";
+import type { AccountProfile, Capability, DispatchPolicy, Provider } from "./types.js";
 
 export interface BackendConfig {
   provider: Provider;
@@ -18,6 +18,7 @@ export interface AgentDispatchConfig {
     capability?: Capability;
     backend?: string;
   };
+  policy?: DispatchPolicy;
 }
 
 export function listAccountProfiles(config: AgentDispatchConfig): AccountProfile[] {

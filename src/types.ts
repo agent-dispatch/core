@@ -82,6 +82,29 @@ export interface DispatchRequest {
   metadata?: Record<string, unknown>;
 }
 
+export type PolicyEffect = "allow" | "deny";
+
+export interface DispatchPolicyRule {
+  effect: PolicyEffect;
+  providers?: Provider[];
+  accountProfiles?: string[];
+  capabilities?: Capability[];
+  taskTypes?: TaskType[];
+  targetModes?: TargetMode[];
+  reason?: string;
+}
+
+export interface DispatchPolicy {
+  defaultEffect?: PolicyEffect;
+  rules: DispatchPolicyRule[];
+}
+
+export interface PolicyDecision {
+  allowed: boolean;
+  reason: string;
+  matchedRule?: DispatchPolicyRule;
+}
+
 export interface AdapterCapability {
   provider: Provider;
   capability: Capability;

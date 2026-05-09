@@ -81,4 +81,25 @@ describe("RuntimeService", () => {
     const task = await service.getTaskStatus(handle.taskId);
     expect(["running", "succeeded"]).toContain(task.status);
   });
+
+  it("applies configured dispatch policy before adapter selection", async () => {
+    const service = new RuntimeService({
+      config: {
+        accounts: { "dev-aws": { provider: "aws", credentialSource: "aws-sdk-default" } },
+        backends: {},
+        policy: { rules: [{ effect: "deny", providers: ["aws"], reason: "aws disabled" }] }
+      },
+      store: new MemoryStore(),
+      adapters: [mockAdapter([])]
+    });
+
+    await expect(service.dispatchTask({
+      provider: "aws",
+      accountProfile: "dev-aws",
+      capability: "agent-runtime",
+      taskType: "agent.run",
+      target: { mode: "session" },
+      input: { instruction: "run" }
+    })).rejects.toMatchObject({ code: "policy.denied" });
+  });
 });

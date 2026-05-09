@@ -2,6 +2,7 @@ import { adapterSupports, type BackendAdapter } from "./adapter.js";
 import { getAccountProfile, listAccountProfiles, type AgentDispatchConfig } from "./config.js";
 import { AgentDispatchError, toRuntimeError } from "./errors.js";
 import { createId, nowIso } from "./ids.js";
+import { authorizeDispatchRequest } from "./policy.js";
 import type { TaskStore } from "./store.js";
 import type { DispatchRequest, RuntimeEvent, TaskHandle, TaskRecord, TaskResult } from "./types.js";
 
@@ -37,6 +38,14 @@ export class RuntimeService {
   }
 
   async dispatchTask(request: DispatchRequest): Promise<TaskHandle> {
+    const policyDecision = authorizeDispatchRequest(request, this.config.policy);
+    if (!policyDecision.allowed) {
+      throw new AgentDispatchError({
+        code: "policy.denied",
+        message: policyDecision.reason
+      });
+    }
+
     const account = getAccountProfile(this.config, request.accountProfile);
     if (!account) {
       throw new AgentDispatchError({
