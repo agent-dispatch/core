@@ -12,3 +12,7 @@ This package is the compatibility anchor for all AgentDispatch repositories. Clo
 - Adapters: provider-specific implementations behind a stable `BackendAdapter` contract.
 - Policies: provider-neutral authorization rules for account profiles, capabilities, task types, and target modes.
 - Testing: `assertBackendAdapterContract` gives adapter repos a reusable conformance check.
+
+## Publishing
+
+See `docs/release.md` for the npm publishing workflow and the dependency-order checklist for the separate `agent-dispatch` repositories.
