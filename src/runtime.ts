@@ -186,7 +186,23 @@ export class RuntimeService {
         updatedAt: nowIso()
       });
       await this.store.appendEvent(this.event(task.id, "task.succeeded", "Task completed."));
-      await adapter.cleanup(resolved.target);
+      const cleanup = await adapter.cleanup(resolved.target);
+      if (provisioned.runtime) {
+        await this.store.updateRuntime(provisioned.runtime.id, {
+          status: cleanup.status === "completed" ? "deleted" : cleanup.status === "failed" ? "failed" : provisioned.runtime.status,
+          cleanupStatus: cleanup.status === "completed" ? "completed" : cleanup.status === "failed" ? "failed" : provisioned.runtime.cleanupStatus,
+          providerRefs: { ...provisioned.runtime.providerRefs, ...cleanup.providerRefs },
+          updatedAt: nowIso()
+        });
+      }
+      if (cleanup.status !== "skipped") {
+        await this.store.appendEvent(this.event(
+          task.id,
+          cleanup.status === "failed" ? "task.failed" : "task.progress",
+          cleanup.status === "failed" ? cleanup.error?.message ?? "Runtime cleanup failed." : "Runtime cleanup completed.",
+          { cleanup }
+        ));
+      }
     } catch (error) {
       const runtimeError = toRuntimeError(error);
       await this.store.updateTask(task.id, { status: "failed", error: runtimeError, updatedAt: nowIso() });

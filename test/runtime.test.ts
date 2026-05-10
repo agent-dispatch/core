@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { BackendAdapter, DispatchRequest, RuntimeEvent, TaskStore } from "../src/index.js";
+import { nowIso, type BackendAdapter, type CleanupResult, type DispatchRequest, type RuntimeEvent, type RuntimeRecord, type TaskStore } from "../src/index.js";
 import { RuntimeService } from "../src/index.js";
 
 class MemoryStore implements TaskStore {
   tasks = new Map<string, any>();
+  runtimes = new Map<string, RuntimeRecord>();
   events = new Map<string, RuntimeEvent[]>();
   logs = new Map<string, string>();
   artifacts = new Map<string, any[]>();
@@ -16,7 +17,14 @@ class MemoryStore implements TaskStore {
     return next;
   }
   async listTasks() { return [...this.tasks.values()]; }
-  async saveRuntime() {}
+  async saveRuntime(runtime: RuntimeRecord) { this.runtimes.set(runtime.id, runtime); }
+  async updateRuntime(runtimeId: string, patch: Partial<RuntimeRecord>) {
+    const current = this.runtimes.get(runtimeId);
+    if (!current) throw new Error(`Runtime ${runtimeId} was not found.`);
+    const next = { ...current, ...patch };
+    this.runtimes.set(runtimeId, next);
+    return next;
+  }
   async saveSession() {}
   async appendEvent(event: RuntimeEvent) {
     const current = this.events.get(event.taskId) ?? [];
@@ -36,7 +44,7 @@ class MemoryStore implements TaskStore {
   async listArtifacts(taskId: string) { return this.artifacts.get(taskId) ?? []; }
 }
 
-function mockAdapter(events: RuntimeEvent[]): BackendAdapter {
+function mockAdapter(events: RuntimeEvent[], cleanup: CleanupResult = { status: "completed" }): BackendAdapter {
   return {
     name: "mock-agent-runtime",
     provider: "aws",
@@ -49,7 +57,7 @@ function mockAdapter(events: RuntimeEvent[]): BackendAdapter {
     startTask: async () => ({ result: { ok: true } }),
     streamEvents: async function* () { yield* events; },
     cancel: async () => ({ status: "cancelled" }),
-    cleanup: async () => ({ status: "completed" })
+    cleanup: async () => cleanup
   };
 }
 
@@ -102,4 +110,113 @@ describe("RuntimeService", () => {
       input: { instruction: "run" }
     })).rejects.toMatchObject({ code: "policy.denied" });
   });
+
+  it("persists runtime cleanup status after successful runtime tasks", async () => {
+    const store = new MemoryStore();
+    const request: DispatchRequest = {
+      provider: "aws",
+      accountProfile: "dev-aws",
+      capability: "agent-runtime",
+      taskType: "agent.run",
+      target: { mode: "runtime" },
+      input: { instruction: "run" }
+    };
+    const timestamp = nowIso();
+    const adapter: BackendAdapter = {
+      ...mockAdapter([], { status: "completed", providerRefs: { cleanupId: "cleanup_1" } }),
+      capabilities: () => [{ provider: "aws", capability: "agent-runtime", taskTypes: ["agent.run"], targetModes: ["runtime"] }],
+      resolveTarget: async (dispatch) => ({
+        account: { name: dispatch.accountProfile, provider: "aws", credentialSource: "test" },
+        target: { provider: "aws", accountProfile: dispatch.accountProfile, capability: "agent-runtime", backend: "mock-agent-runtime", mode: "runtime" }
+      }),
+      provision: async ({ task, dispatch }) => ({
+        runtime: {
+          id: "runtime_1",
+          taskId: task.id,
+          provider: dispatch.provider,
+          accountProfile: dispatch.accountProfile,
+          capability: dispatch.capability,
+          backend: "mock-agent-runtime",
+          status: "ready",
+          providerRefs: { runtimeId: "provider_runtime_1" },
+          cleanupStatus: "pending",
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }
+      })
+    };
+    const service = new RuntimeService({
+      config: { accounts: { "dev-aws": { provider: "aws", credentialSource: "aws-sdk-default" } }, backends: {} },
+      store,
+      adapters: [adapter]
+    });
+
+    const handle = await service.dispatchTask(request);
+    await waitForStatus(service, handle.taskId, "succeeded");
+
+    expect(store.runtimes.get("runtime_1")).toMatchObject({
+      status: "deleted",
+      cleanupStatus: "completed",
+      providerRefs: { runtimeId: "provider_runtime_1", cleanupId: "cleanup_1" }
+    });
+  });
+
+  it("persists failed runtime cleanup without changing succeeded task result", async () => {
+    const store = new MemoryStore();
+    const request: DispatchRequest = {
+      provider: "aws",
+      accountProfile: "dev-aws",
+      capability: "agent-runtime",
+      taskType: "agent.run",
+      target: { mode: "runtime" },
+      input: { instruction: "run" }
+    };
+    const timestamp = nowIso();
+    const adapter: BackendAdapter = {
+      ...mockAdapter([], { status: "failed", error: { code: "cleanup.failed", message: "delete failed" } }),
+      capabilities: () => [{ provider: "aws", capability: "agent-runtime", taskTypes: ["agent.run"], targetModes: ["runtime"] }],
+      resolveTarget: async (dispatch) => ({
+        account: { name: dispatch.accountProfile, provider: "aws", credentialSource: "test" },
+        target: { provider: "aws", accountProfile: dispatch.accountProfile, capability: "agent-runtime", backend: "mock-agent-runtime", mode: "runtime" }
+      }),
+      provision: async ({ task, dispatch }) => ({
+        runtime: {
+          id: "runtime_failed_cleanup",
+          taskId: task.id,
+          provider: dispatch.provider,
+          accountProfile: dispatch.accountProfile,
+          capability: dispatch.capability,
+          backend: "mock-agent-runtime",
+          status: "ready",
+          providerRefs: {},
+          cleanupStatus: "pending",
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }
+      })
+    };
+    const service = new RuntimeService({
+      config: { accounts: { "dev-aws": { provider: "aws", credentialSource: "aws-sdk-default" } }, backends: {} },
+      store,
+      adapters: [adapter]
+    });
+
+    const handle = await service.dispatchTask(request);
+    const task = await waitForStatus(service, handle.taskId, "succeeded");
+
+    expect(task.result).toEqual({ ok: true });
+    expect(store.runtimes.get("runtime_failed_cleanup")).toMatchObject({
+      status: "failed",
+      cleanupStatus: "failed"
+    });
+  });
 });
+
+async function waitForStatus(service: RuntimeService, taskId: string, status: string): Promise<any> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const task = await service.getTaskStatus(taskId);
+    if (task.status === status) return task;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Task ${taskId} did not reach ${status}.`);
+}

@@ -13,6 +13,7 @@ export interface TaskStore {
   updateTask(taskId: string, patch: Partial<TaskRecord>): Promise<TaskRecord>;
   listTasks(): Promise<TaskRecord[]>;
   saveRuntime(runtime: RuntimeRecord): Promise<void>;
+  updateRuntime(runtimeId: string, patch: Partial<RuntimeRecord>): Promise<RuntimeRecord>;
   saveSession(session: SessionRecord): Promise<void>;
   appendEvent(event: RuntimeEvent): Promise<RuntimeEvent>;
   listEvents(taskId: string, afterSequence?: number): Promise<RuntimeEvent[]>;
