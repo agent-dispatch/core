@@ -1,5 +1,12 @@
 import { adapterSupports, type BackendAdapter } from "./adapter.js";
-import { getAccountProfile, listAccountProfiles, type AgentDispatchConfig } from "./config.js";
+import {
+  getAccountProfile,
+  getDefaultRuntimeProfile,
+  getRuntimeProfile,
+  listAccountProfiles,
+  listRuntimeProfiles,
+  type AgentDispatchConfig
+} from "./config.js";
 import { AgentDispatchError, toRuntimeError } from "./errors.js";
 import { createId, nowIso } from "./ids.js";
 import { authorizeDispatchRequest } from "./policy.js";
@@ -37,6 +44,22 @@ export class RuntimeService {
     return listAccountProfiles(this.config);
   }
 
+  listRuntimeProfiles() {
+    return listRuntimeProfiles(this.config);
+  }
+
+  getRuntimeProfile(name: string) {
+    return getRuntimeProfile(this.config, name);
+  }
+
+  getDefaultRuntimeProfile() {
+    return getDefaultRuntimeProfile(this.config);
+  }
+
+  getDefaults() {
+    return { ...this.config.defaults };
+  }
+
   async dispatchTask(request: DispatchRequest): Promise<TaskHandle> {
     const policyDecision = authorizeDispatchRequest(request, this.config.policy);
     if (!policyDecision.allowed) {
@@ -60,13 +83,7 @@ export class RuntimeService {
       });
     }
 
-    const adapter = this.adapters.find((candidate) => adapterSupports(candidate, request));
-    if (!adapter) {
-      throw new AgentDispatchError({
-        code: "adapter.unsupported",
-        message: `No adapter supports ${request.provider}/${request.capability}/${request.taskType}/${request.target.mode}.`
-      });
-    }
+    const adapter = this.selectAdapter(request);
 
     const task = this.createTaskRecord(request, adapter.name);
     await this.store.saveTask(task);
@@ -226,6 +243,45 @@ export class RuntimeService {
       createdAt: timestamp,
       updatedAt: timestamp
     };
+  }
+
+  private selectAdapter(request: DispatchRequest): BackendAdapter {
+    const backendName = request.backend ?? this.defaultBackendFor(request);
+    if (backendName) {
+      const backend = this.config.backends[backendName];
+      if (!backend) {
+        throw new AgentDispatchError({ code: "backend.not_found", message: `Backend ${backendName} was not found.` });
+      }
+      const adapter = this.adapters.find((candidate) => candidate.name === backend.adapter);
+      if (!adapter || !adapterSupports(adapter, request)) {
+        throw new AgentDispatchError({
+          code: "adapter.unsupported",
+          message: `Backend ${backendName} does not support ${request.provider}/${request.capability}/${request.taskType}/${request.target.mode}.`
+        });
+      }
+      return adapter;
+    }
+
+    const adapter = this.adapters.find((candidate) => adapterSupports(candidate, request));
+    if (!adapter) {
+      throw new AgentDispatchError({
+        code: "adapter.unsupported",
+        message: `No adapter supports ${request.provider}/${request.capability}/${request.taskType}/${request.target.mode}.`
+      });
+    }
+    return adapter;
+  }
+
+  private defaultBackendFor(request: DispatchRequest): string | undefined {
+    const backendName = this.config.defaults?.backend;
+    if (!backendName) return undefined;
+    const backend = this.config.backends[backendName];
+    if (!backend) return backendName;
+    return backend.provider === request.provider &&
+      backend.account === request.accountProfile &&
+      backend.capability === request.capability
+      ? backendName
+      : undefined;
   }
 
   private event(taskId: string, type: RuntimeEvent["type"], message?: string, payload?: Record<string, unknown>): RuntimeEvent {

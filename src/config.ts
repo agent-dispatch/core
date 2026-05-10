@@ -1,4 +1,4 @@
-import type { AccountProfile, Capability, DispatchPolicy, Provider } from "./types.js";
+import type { AccountProfile, Capability, DispatchPolicy, DispatchTarget, Provider, TargetMode } from "./types.js";
 
 export interface BackendConfig {
   provider: Provider;
@@ -8,15 +8,33 @@ export interface BackendConfig {
   details?: Record<string, unknown>;
 }
 
+export interface RuntimeProfileConfig {
+  provider: Provider;
+  account: string;
+  capability: Capability;
+  backend: string;
+  target?: Partial<DispatchTarget> & { mode: TargetMode };
+  framework?: string;
+  runtimeTools?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export type RuntimeProfile = RuntimeProfileConfig & { name: string };
+
 export interface AgentDispatchConfig {
   stateDir?: string;
   accounts: Record<string, Omit<AccountProfile, "name">>;
   backends: Record<string, BackendConfig>;
+  runtimes?: Record<string, RuntimeProfileConfig>;
   defaults?: {
+    runtime?: string;
     accountProfile?: string;
     provider?: Provider;
     capability?: Capability;
     backend?: string;
+    targetMode?: TargetMode;
+    framework?: string;
+    runtimeTools?: Record<string, unknown>;
   };
   policy?: DispatchPolicy;
 }
@@ -33,6 +51,22 @@ export function getAccountProfile(config: AgentDispatchConfig, name: string): Ac
   return account ? { name, ...account } : undefined;
 }
 
+export function listRuntimeProfiles(config: AgentDispatchConfig): RuntimeProfile[] {
+  return Object.entries(config.runtimes ?? {}).map(([name, runtime]) => ({
+    name,
+    ...runtime
+  }));
+}
+
+export function getRuntimeProfile(config: AgentDispatchConfig, name: string): RuntimeProfile | undefined {
+  const runtime = config.runtimes?.[name];
+  return runtime ? { name, ...runtime } : undefined;
+}
+
+export function getDefaultRuntimeProfile(config: AgentDispatchConfig): RuntimeProfile | undefined {
+  return config.defaults?.runtime ? getRuntimeProfile(config, config.defaults.runtime) : undefined;
+}
+
 export function validateConfig(config: AgentDispatchConfig): string[] {
   const errors: string[] = [];
   for (const [backendName, backend] of Object.entries(config.backends)) {
@@ -44,6 +78,40 @@ export function validateConfig(config: AgentDispatchConfig): string[] {
     if (account.provider !== backend.provider) {
       errors.push(`Backend ${backendName} provider ${backend.provider} does not match account ${backend.account}.`);
     }
+  }
+  for (const [runtimeName, runtime] of Object.entries(config.runtimes ?? {})) {
+    const account = config.accounts[runtime.account];
+    if (!account) {
+      errors.push(`Runtime ${runtimeName} references missing account profile ${runtime.account}.`);
+      continue;
+    }
+    if (account.provider !== runtime.provider) {
+      errors.push(`Runtime ${runtimeName} provider ${runtime.provider} does not match account ${runtime.account}.`);
+    }
+
+    const backend = config.backends[runtime.backend];
+    if (!backend) {
+      errors.push(`Runtime ${runtimeName} references missing backend ${runtime.backend}.`);
+      continue;
+    }
+    if (backend.provider !== runtime.provider) {
+      errors.push(`Runtime ${runtimeName} provider ${runtime.provider} does not match backend ${runtime.backend}.`);
+    }
+    if (backend.capability !== runtime.capability) {
+      errors.push(`Runtime ${runtimeName} capability ${runtime.capability} does not match backend ${runtime.backend}.`);
+    }
+    if (backend.account !== runtime.account) {
+      errors.push(`Runtime ${runtimeName} account ${runtime.account} does not match backend ${runtime.backend}.`);
+    }
+  }
+  if (config.defaults?.runtime && !config.runtimes?.[config.defaults.runtime]) {
+    errors.push(`Default runtime ${config.defaults.runtime} was not found.`);
+  }
+  if (config.defaults?.backend && !config.backends[config.defaults.backend]) {
+    errors.push(`Default backend ${config.defaults.backend} was not found.`);
+  }
+  if (config.defaults?.accountProfile && !config.accounts[config.defaults.accountProfile]) {
+    errors.push(`Default account profile ${config.defaults.accountProfile} was not found.`);
   }
   return errors;
 }

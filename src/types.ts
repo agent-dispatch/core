@@ -76,6 +76,7 @@ export interface DispatchRequest {
   provider: Provider;
   accountProfile: string;
   capability: Capability;
+  backend?: string;
   taskType: TaskType;
   target: DispatchTarget;
   input: DispatchInput;
