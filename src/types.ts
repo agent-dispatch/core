@@ -231,6 +231,7 @@ export interface StartTaskRequest {
 export interface StartTaskResult {
   providerRefs?: Record<string, unknown>;
   result?: Record<string, unknown>;
+  artifacts?: ArtifactRecord[];
 }
 
 export interface CancelResult {

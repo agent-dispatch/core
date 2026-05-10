@@ -165,6 +165,9 @@ export class RuntimeService {
         providerRefs: { ...task.providerRefs, ...started.providerRefs },
         updatedAt: nowIso()
       });
+      for (const artifact of started.artifacts ?? []) {
+        await this.store.saveArtifact(artifact);
+      }
 
       for await (const event of adapter.streamEvents(task.id)) {
         await this.store.appendEvent(event);
