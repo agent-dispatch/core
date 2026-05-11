@@ -1,4 +1,6 @@
-import type { AccountProfile, Capability, DispatchPolicy, DispatchTarget, Provider, TargetMode } from "./types.js";
+import type { AccountProfile, Capability, DispatchPolicy, DispatchTarget, Provider, RuntimeProtocol, TargetMode } from "./types.js";
+
+export type RuntimeModelConfig = string | Record<string, unknown>;
 
 export interface BackendConfig {
   provider: Provider;
@@ -14,8 +16,11 @@ export interface RuntimeProfileConfig {
   capability: Capability;
   backend: string;
   target?: Partial<DispatchTarget> & { mode: TargetMode };
+  protocol?: RuntimeProtocol;
   framework?: string;
+  model?: RuntimeModelConfig;
   runtimeTools?: Record<string, unknown>;
+  requiredInputs?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -33,7 +38,9 @@ export interface AgentDispatchConfig {
     capability?: Capability;
     backend?: string;
     targetMode?: TargetMode;
+    protocol?: RuntimeProtocol;
     framework?: string;
+    model?: RuntimeModelConfig;
     runtimeTools?: Record<string, unknown>;
   };
   policy?: DispatchPolicy;

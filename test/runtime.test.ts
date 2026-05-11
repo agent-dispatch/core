@@ -49,6 +49,21 @@ function mockAdapter(events: RuntimeEvent[], cleanup: CleanupResult = { status: 
     name: "mock-agent-runtime",
     provider: "aws",
     capabilities: () => [{ provider: "aws", capability: "agent-runtime", taskTypes: ["agent.run"], targetModes: ["session"] }],
+    prepareTask: async ({ dispatch }) => ({
+      providerRefs: { runtimeSessionId: "agentcore_session_mock" },
+      cloudAgent: {
+        protocol: dispatch.target.protocol ?? "a2a",
+        provider: "aws",
+        backend: "mock-agent-runtime",
+        accountProfile: dispatch.accountProfile,
+        sessionId: "agentcore_session_mock",
+        providerRefs: { runtimeSessionId: "agentcore_session_mock" },
+        a2a: {
+          transport: "json-rpc-2.0-http",
+          messageMethod: "message/send"
+        }
+      }
+    }),
     resolveTarget: async (request) => ({
       account: { name: request.accountProfile, provider: "aws", credentialSource: "test" },
       target: { provider: "aws", accountProfile: request.accountProfile, capability: "agent-runtime", backend: "mock-agent-runtime", mode: "session" }
@@ -73,7 +88,7 @@ describe("RuntimeService", () => {
       accountProfile: "dev-aws",
       capability: "agent-runtime",
       taskType: "agent.run",
-      target: { mode: "session" },
+      target: { mode: "session", protocol: "a2a" },
       input: { instruction: "run" }
     };
     const service = new RuntimeService({
@@ -88,10 +103,15 @@ describe("RuntimeService", () => {
     const handle = await service.dispatchTask(request);
     expect(handle.provider).toBe("aws");
     expect(handle.capability).toBe("agent-runtime");
+    expect(handle.cloudAgent).toMatchObject({
+      protocol: "a2a",
+      sessionId: "agentcore_session_mock"
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     const task = await service.getTaskStatus(handle.taskId);
     expect(["running", "succeeded"]).toContain(task.status);
+    expect(task.cloudAgent).toMatchObject({ protocol: "a2a" });
   });
 
   it("applies configured dispatch policy before adapter selection", async () => {

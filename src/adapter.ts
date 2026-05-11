@@ -3,6 +3,8 @@ import type {
   CancelResult,
   CleanupResult,
   DispatchRequest,
+  PrepareTaskRequest,
+  PrepareTaskResult,
   ProvisionRequest,
   ProvisionResult,
   ResolvedTarget,
@@ -17,6 +19,7 @@ export interface BackendAdapter {
   readonly provider: string;
 
   capabilities(): AdapterCapability[];
+  prepareTask?(request: PrepareTaskRequest): Promise<PrepareTaskResult>;
   resolveTarget(request: DispatchRequest): Promise<ResolvedTarget>;
   provision(request: ProvisionRequest): Promise<ProvisionResult>;
   startTask(request: StartTaskRequest): Promise<StartTaskResult>;
@@ -31,7 +34,8 @@ export function adapterSupports(adapter: BackendAdapter, request: DispatchReques
       capability.provider === request.provider &&
       capability.capability === request.capability &&
       capability.taskTypes.includes(request.taskType) &&
-      capability.targetModes.includes(request.target.mode)
+      capability.targetModes.includes(request.target.mode) &&
+      (!request.target.protocol || !capability.protocols || capability.protocols.includes(request.target.protocol))
     );
   });
 }

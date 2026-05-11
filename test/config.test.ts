@@ -19,8 +19,10 @@ const config: AgentDispatchConfig = {
       account: "dev-aws",
       capability: "agent-runtime",
       backend: "aws-agentcore",
+      protocol: "a2a",
       target: { mode: "session", details: { runtimeArn: "arn:aws:bedrock-agentcore:test" } },
       framework: "strands",
+      model: { provider: "bedrock", modelId: "anthropic.claude-3-5-sonnet" },
       runtimeTools: { enabled: ["web-search"] }
     }
   },
@@ -37,7 +39,8 @@ describe("AgentDispatchConfig runtime profiles", () => {
       provider: "aws",
       account: "dev-aws",
       capability: "agent-runtime",
-      backend: "aws-agentcore"
+      backend: "aws-agentcore",
+      protocol: "a2a"
     });
     expect(getDefaultRuntimeProfile(config)).toMatchObject({ name: "research-agent" });
   });

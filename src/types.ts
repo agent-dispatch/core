@@ -20,6 +20,8 @@ export type TaskType = KnownTaskType | (string & {});
 
 export type TargetMode = "session" | "runtime" | "managed-service" | "job" | (string & {});
 
+export type RuntimeProtocol = "http" | "a2a" | "mcp" | "ag-ui" | (string & {});
+
 export type TaskStatus =
   | "queued"
   | "provisioning"
@@ -62,6 +64,7 @@ export interface AccountProfile {
 
 export interface DispatchTarget {
   mode: TargetMode;
+  protocol?: RuntimeProtocol;
   details?: Record<string, unknown>;
 }
 
@@ -111,6 +114,7 @@ export interface AdapterCapability {
   capability: Capability;
   taskTypes: TaskType[];
   targetModes: TargetMode[];
+  protocols?: RuntimeProtocol[];
   configRequirements?: string[];
 }
 
@@ -120,6 +124,7 @@ export interface RuntimeTarget {
   capability: Capability;
   backend: string;
   mode: TargetMode;
+  protocol?: RuntimeProtocol;
   details?: Record<string, unknown>;
   providerRefs?: Record<string, unknown>;
 }
@@ -167,6 +172,7 @@ export interface TaskRecord {
   backend?: string;
   status: TaskStatus;
   providerRefs: Record<string, unknown>;
+  cloudAgent?: CloudAgentInteraction;
   result?: Record<string, unknown>;
   error?: RuntimeErrorShape;
   createdAt: string;
@@ -215,10 +221,52 @@ export interface ProvisionRequest {
   target: RuntimeTarget;
 }
 
+export interface PrepareTaskRequest {
+  dispatch: DispatchRequest;
+  task: TaskRecord;
+}
+
+export interface ProviderInvocationDetails {
+  type: string;
+  provider: Provider;
+  region?: string;
+  accountProfile: string;
+  credentialSource?: string;
+  [key: string]: unknown;
+}
+
+export interface A2AInteractionDetails {
+  transport: "json-rpc-2.0-http" | (string & {});
+  messageMethod: "message/send" | (string & {});
+  agentCardPath?: string;
+  agentCardOperation?: string;
+  payloadFormat?: string;
+  [key: string]: unknown;
+}
+
+export interface CloudAgentInteraction {
+  protocol: RuntimeProtocol;
+  provider: Provider;
+  backend: string;
+  accountProfile: string;
+  sessionId?: string;
+  providerRefs?: Record<string, unknown>;
+  invocation?: ProviderInvocationDetails;
+  a2a?: A2AInteractionDetails;
+  model?: unknown;
+  tools?: Record<string, unknown>;
+}
+
+export interface PrepareTaskResult {
+  providerRefs?: Record<string, unknown>;
+  cloudAgent?: CloudAgentInteraction;
+}
+
 export interface ProvisionResult {
   runtime?: RuntimeRecord;
   session?: SessionRecord;
   providerRefs?: Record<string, unknown>;
+  cloudAgent?: CloudAgentInteraction;
 }
 
 export interface StartTaskRequest {
@@ -231,6 +279,7 @@ export interface StartTaskRequest {
 
 export interface StartTaskResult {
   providerRefs?: Record<string, unknown>;
+  cloudAgent?: CloudAgentInteraction;
   result?: Record<string, unknown>;
   artifacts?: ArtifactRecord[];
 }
@@ -254,6 +303,7 @@ export interface TaskHandle {
   accountProfile: string;
   capability: Capability;
   backend: string;
+  cloudAgent?: CloudAgentInteraction;
   poll: {
     statusTool: "get_task_status";
     logsTool: "get_task_logs";

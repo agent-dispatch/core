@@ -56,6 +56,11 @@ export class RuntimeService {
     return getRuntimeProfile(this.config, name);
   }
 
+  getBackend(name: string) {
+    const backend = this.config.backends[name];
+    return backend ? { name, ...backend } : undefined;
+  }
+
   getDefaultRuntimeProfile() {
     return getDefaultRuntimeProfile(this.config);
   }
@@ -90,6 +95,13 @@ export class RuntimeService {
     const adapter = this.selectAdapter(request);
 
     const task = this.createTaskRecord(request, adapter.name);
+    const prepared = adapter.prepareTask ? await adapter.prepareTask({ dispatch: request, task }) : undefined;
+    if (prepared?.providerRefs) {
+      task.providerRefs = { ...task.providerRefs, ...prepared.providerRefs };
+    }
+    if (prepared?.cloudAgent) {
+      task.cloudAgent = prepared.cloudAgent;
+    }
     await this.store.saveTask(task);
     await this.store.appendEvent(this.event(task.id, "task.created", "Task accepted by AgentDispatch."));
 
@@ -102,6 +114,7 @@ export class RuntimeService {
       accountProfile: task.accountProfile,
       capability: task.capability,
       backend: adapter.name,
+      cloudAgent: prepared?.cloudAgent,
       poll: {
         statusTool: "get_task_status",
         logsTool: "get_task_logs",
@@ -180,6 +193,7 @@ export class RuntimeService {
       await this.store.updateTask(task.id, {
         status: "starting",
         providerRefs: { ...task.providerRefs, ...provisioned.providerRefs, ...target.providerRefs },
+        cloudAgent: provisioned.cloudAgent ?? task.cloudAgent,
         updatedAt: nowIso()
       });
       await this.store.appendEvent(this.event(task.id, "task.started", "Starting provider task."));
@@ -200,6 +214,7 @@ export class RuntimeService {
       await this.store.updateTask(task.id, {
         status: "running",
         providerRefs: { ...(await this.latestProviderRefs(task.id)), ...started.providerRefs },
+        cloudAgent: started.cloudAgent ?? provisioned.cloudAgent ?? task.cloudAgent,
         updatedAt: nowIso()
       });
       for (const artifact of started.artifacts ?? []) {
