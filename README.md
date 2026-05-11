@@ -15,4 +15,4 @@ This package is the compatibility anchor for all AgentDispatch repositories. Clo
 
 ## Publishing
 
-See `docs/release.md` for the npm publishing workflow and the dependency-order checklist for the separate `agent-dispatch` repositories.
+See the [release workflow](https://github.com/agent-dispatch/core/blob/main/docs/release.md) for the npm publishing workflow and the dependency-order checklist for the separate `agent-dispatch` repositories.
