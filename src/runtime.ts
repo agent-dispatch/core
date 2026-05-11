@@ -187,9 +187,11 @@ export class RuntimeService {
       }
 
       for await (const event of adapter.streamEvents(task.id)) {
-        await this.store.appendEvent(event);
-        if (event.type === "task.log" && event.message) {
-          await this.store.appendLog(task.id, `${event.message}\n`);
+        const validatedEvent = this.validateAdapterEvent(task.id, event);
+        if (!validatedEvent) continue;
+        await this.store.appendEvent(validatedEvent);
+        if (validatedEvent.type === "task.log" && validatedEvent.message) {
+          await this.store.appendLog(task.id, `${validatedEvent.message}\n`);
         }
       }
 
@@ -286,6 +288,16 @@ export class RuntimeService {
       backend.capability === request.capability
       ? backendName
       : undefined;
+  }
+
+  private validateAdapterEvent(taskId: string, event: RuntimeEvent): RuntimeEvent | undefined {
+    if (event.taskId === taskId) return event;
+    void this.store.appendEvent(this.event(taskId, "task.log", "Ignored adapter event with mismatched taskId.", {
+      expectedTaskId: taskId,
+      receivedTaskId: event.taskId,
+      eventType: event.type
+    }));
+    return undefined;
   }
 
   private event(taskId: string, type: RuntimeEvent["type"], message?: string, payload?: Record<string, unknown>): RuntimeEvent {

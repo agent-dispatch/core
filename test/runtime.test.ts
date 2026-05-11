@@ -55,7 +55,11 @@ function mockAdapter(events: RuntimeEvent[], cleanup: CleanupResult = { status: 
     }),
     provision: async () => ({}),
     startTask: async () => ({ result: { ok: true } }),
-    streamEvents: async function* () { yield* events; },
+    streamEvents: async function* (taskId: string) {
+      for (const event of events) {
+        yield { ...event, taskId: event.taskId === "unused" ? taskId : event.taskId };
+      }
+    },
     cancel: async () => ({ status: "cancelled" }),
     cleanup: async () => cleanup
   };
@@ -109,6 +113,39 @@ describe("RuntimeService", () => {
       target: { mode: "session" },
       input: { instruction: "run" }
     })).rejects.toMatchObject({ code: "policy.denied" });
+  });
+
+  it("ignores adapter events for a different task id", async () => {
+    const store = new MemoryStore();
+    const request: DispatchRequest = {
+      provider: "aws",
+      accountProfile: "dev-aws",
+      capability: "agent-runtime",
+      taskType: "agent.run",
+      target: { mode: "session" },
+      input: { instruction: "run" }
+    };
+    const service = new RuntimeService({
+      config: {
+        accounts: { "dev-aws": { provider: "aws", credentialSource: "aws-sdk-default" } },
+        backends: {}
+      },
+      store,
+      adapters: [mockAdapter([
+        { taskId: "wrong_task", type: "task.log", message: "wrong task log", timestamp: nowIso() },
+        { taskId: "unused", type: "task.log", message: "correct task log", timestamp: nowIso() }
+      ])]
+    });
+
+    const handle = await service.dispatchTask(request);
+    await waitForStatus(service, handle.taskId, "succeeded");
+
+    expect(store.events.get("wrong_task")).toBeUndefined();
+    expect(store.logs.get(handle.taskId)).not.toContain("wrong task log");
+    expect(store.logs.get(handle.taskId)).toContain("correct task log");
+    expect(store.events.get(handle.taskId)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "task.log", message: "Ignored adapter event with mismatched taskId." })
+    ]));
   });
 
   it("persists runtime cleanup status after successful runtime tasks", async () => {
