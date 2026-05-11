@@ -179,7 +179,7 @@ export class RuntimeService {
 
       await this.store.updateTask(task.id, {
         status: "running",
-        providerRefs: { ...task.providerRefs, ...started.providerRefs },
+        providerRefs: { ...(await this.latestProviderRefs(task.id)), ...started.providerRefs },
         updatedAt: nowIso()
       });
       for (const artifact of started.artifacts ?? []) {
@@ -243,6 +243,10 @@ export class RuntimeService {
       createdAt: timestamp,
       updatedAt: timestamp
     };
+  }
+
+  private async latestProviderRefs(taskId: string): Promise<Record<string, unknown>> {
+    return (await this.store.getTask(taskId))?.providerRefs ?? {};
   }
 
   private selectAdapter(request: DispatchRequest): BackendAdapter {

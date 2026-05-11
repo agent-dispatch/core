@@ -142,8 +142,10 @@ describe("RuntimeService", () => {
           cleanupStatus: "pending",
           createdAt: timestamp,
           updatedAt: timestamp
-        }
-      })
+        },
+        providerRefs: { runtimeId: "provider_runtime_1" }
+      }),
+      startTask: async () => ({ providerRefs: { runtimeSessionId: "agentcore_session_1" }, result: { ok: true } })
     };
     const service = new RuntimeService({
       config: { accounts: { "dev-aws": { provider: "aws", credentialSource: "aws-sdk-default" } }, backends: {} },
@@ -158,6 +160,12 @@ describe("RuntimeService", () => {
       status: "deleted",
       cleanupStatus: "completed",
       providerRefs: { runtimeId: "provider_runtime_1", cleanupId: "cleanup_1" }
+    });
+    expect(store.tasks.get(handle.taskId)).toMatchObject({
+      providerRefs: {
+        runtimeId: "provider_runtime_1",
+        runtimeSessionId: "agentcore_session_1"
+      }
     });
   });
 
