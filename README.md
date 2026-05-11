@@ -1,8 +1,8 @@
-# @agentdispatch/core
+# @agent-dispatch/core
 
 Provider-neutral runtime contracts and dispatch orchestration for AgentDispatch.
 
-This package is the compatibility anchor for all AgentDispatch repositories. Cloud adapters, stores, SDKs, CLIs, and MCP servers depend on these interfaces; `@agentdispatch/core` does not depend on any adapter package.
+This package is the compatibility anchor for all AgentDispatch repositories. Cloud adapters, stores, SDKs, CLIs, and MCP servers depend on these interfaces; `@agent-dispatch/core` does not depend on any adapter package.
 
 ## Core concepts
 

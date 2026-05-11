@@ -1,5 +1,5 @@
 {
-  "name": "@agentdispatch/core",
+  "name": "@agent-dispatch/core",
   "version": "0.1.0",
   "description": "Provider-neutral runtime contracts and dispatch orchestration for AgentDispatch.",
   "type": "module",
@@ -25,5 +25,16 @@
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agent-dispatch/core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agent-dispatch/core/issues"
+  },
+  "homepage": "https://github.com/agent-dispatch/core#readme",
+  "publishConfig": {
+    "access": "public"
   }
 }
