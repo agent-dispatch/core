@@ -55,7 +55,11 @@ function mockAdapter(events: RuntimeEvent[], cleanup: CleanupResult = { status: 
     }),
     provision: async () => ({}),
     startTask: async () => ({ result: { ok: true } }),
-    streamEvents: async function* () { yield* events; },
+    streamEvents: async function* (taskId: string) {
+      for (const event of events) {
+        yield { ...event, taskId: event.taskId === "unused" ? taskId : event.taskId };
+      }
+    },
     cancel: async () => ({ status: "cancelled" }),
     cleanup: async () => cleanup
   };
@@ -218,7 +222,132 @@ describe("RuntimeService", () => {
       cleanupStatus: "failed"
     });
   });
+
+  it("cleans up provisioned runtime resources when startup fails", async () => {
+    const store = new MemoryStore();
+    const timestamp = nowIso();
+    let cleanupCalls = 0;
+    const adapter: BackendAdapter = {
+      ...mockAdapter([]),
+      capabilities: () => [{ provider: "aws", capability: "agent-runtime", taskTypes: ["agent.run"], targetModes: ["runtime"] }],
+      resolveTarget: async (dispatch) => ({
+        account: { name: dispatch.accountProfile, provider: "aws", credentialSource: "test" },
+        target: { provider: "aws", accountProfile: dispatch.accountProfile, capability: "agent-runtime", backend: "mock-agent-runtime", mode: "runtime" }
+      }),
+      provision: async ({ task, dispatch }) => ({
+        runtime: {
+          id: "runtime_start_failed",
+          taskId: task.id,
+          provider: dispatch.provider,
+          accountProfile: dispatch.accountProfile,
+          capability: dispatch.capability,
+          backend: "mock-agent-runtime",
+          status: "ready",
+          providerRefs: {},
+          cleanupStatus: "pending",
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }
+      }),
+      startTask: async () => { throw new Error("start failed"); },
+      cleanup: async () => {
+        cleanupCalls += 1;
+        return { status: "completed" };
+      }
+    };
+    const service = runtimeService(store, adapter);
+
+    const handle = await service.dispatchTask(runtimeRequest());
+    await waitForStatus(service, handle.taskId, "failed");
+
+    expect(cleanupCalls).toBe(1);
+    expect(store.runtimes.get("runtime_start_failed")).toMatchObject({ status: "deleted", cleanupStatus: "completed" });
+  });
+
+  it("does not mutate terminal tasks when cancellation is requested", async () => {
+    const store = new MemoryStore();
+    const service = runtimeService(store, mockAdapter([]));
+    const handle = await service.dispatchTask(sessionRequest());
+    await waitForStatus(service, handle.taskId, "succeeded");
+
+    await expect(service.cancelTask(handle.taskId)).rejects.toMatchObject({ code: "task.terminal" });
+    await expect(service.getTaskStatus(handle.taskId)).resolves.toMatchObject({ status: "succeeded" });
+  });
+
+  it("does not mark a task succeeded while cancellation is in progress", async () => {
+    const store = new MemoryStore();
+    let releaseCancel!: () => void;
+    let releaseStart!: () => void;
+    const cancelStarted = new Promise<void>((resolve) => { releaseCancel = resolve; });
+    const startCanFinish = new Promise<void>((resolve) => { releaseStart = resolve; });
+    const adapter: BackendAdapter = {
+      ...mockAdapter([]),
+      cancel: async () => {
+        await cancelStarted;
+        return { status: "cancelled" };
+      },
+      startTask: async () => {
+        await startCanFinish;
+        return { result: { ok: true } };
+      },
+      streamEvents: async function* (taskId: string) {
+        yield { taskId, type: "task.log", message: "done" };
+      }
+    };
+    const service = runtimeService(store, adapter);
+
+    const handle = await service.dispatchTask(sessionRequest());
+    await waitForStatus(service, handle.taskId, "starting");
+    const cancelPromise = service.cancelTask(handle.taskId);
+    await waitForStatus(service, handle.taskId, "cancelling");
+    releaseStart();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await expect(service.getTaskStatus(handle.taskId)).resolves.toMatchObject({ status: "cancelling" });
+    releaseCancel();
+    await cancelPromise;
+    await expect(service.getTaskStatus(handle.taskId)).resolves.toMatchObject({ status: "cancelled" });
+  });
+
+  it("fails the task when adapters emit events for the wrong task", async () => {
+    const store = new MemoryStore();
+    const adapter: BackendAdapter = {
+      ...mockAdapter([]),
+      streamEvents: async function* () {
+        yield { taskId: "other_task", type: "task.log", message: "wrong" };
+      }
+    };
+    const service = runtimeService(store, adapter);
+
+    const handle = await service.dispatchTask(sessionRequest());
+    const task = await waitForStatus(service, handle.taskId, "failed");
+
+    expect(task.error?.code).toBe("adapter.event_task_mismatch");
+    expect(await store.listEvents("other_task")).toHaveLength(0);
+  });
 });
+
+function sessionRequest(): DispatchRequest {
+  return {
+    provider: "aws",
+    accountProfile: "dev-aws",
+    capability: "agent-runtime",
+    taskType: "agent.run",
+    target: { mode: "session" },
+    input: { instruction: "run" }
+  };
+}
+
+function runtimeRequest(): DispatchRequest {
+  return { ...sessionRequest(), target: { mode: "runtime" } };
+}
+
+function runtimeService(store: TaskStore, adapter: BackendAdapter): RuntimeService {
+  return new RuntimeService({
+    config: { accounts: { "dev-aws": { provider: "aws", credentialSource: "aws-sdk-default" } }, backends: {} },
+    store,
+    adapters: [adapter]
+  });
+}
 
 async function waitForStatus(service: RuntimeService, taskId: string, status: string): Promise<any> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
