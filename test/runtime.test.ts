@@ -284,6 +284,26 @@ describe("RuntimeService", () => {
     expect(store.runtimes.get("runtime_start_failed")).toMatchObject({ status: "deleted", cleanupStatus: "completed" });
   });
 
+  it("marks the task running while the provider invocation is still executing", async () => {
+    const store = new MemoryStore();
+    let releaseStart!: () => void;
+    const startCanFinish = new Promise<void>((resolve) => { releaseStart = resolve; });
+    const adapter: BackendAdapter = {
+      ...mockAdapter([]),
+      startTask: async () => {
+        await startCanFinish;
+        return { result: { ok: true } };
+      }
+    };
+    const service = runtimeService(store, adapter);
+
+    const handle = await service.dispatchTask(sessionRequest());
+    await waitForStatus(service, handle.taskId, "running");
+    await expect(service.getTaskStatus(handle.taskId)).resolves.toMatchObject({ status: "running" });
+    releaseStart();
+    await waitForStatus(service, handle.taskId, "succeeded");
+  });
+
   it("does not mutate terminal tasks when cancellation is requested", async () => {
     const store = new MemoryStore();
     const service = runtimeService(store, mockAdapter([]));
@@ -317,7 +337,7 @@ describe("RuntimeService", () => {
     const service = runtimeService(store, adapter);
 
     const handle = await service.dispatchTask(sessionRequest());
-    await waitForStatus(service, handle.taskId, "starting");
+    await waitForStatus(service, handle.taskId, "running");
     const cancelPromise = service.cancelTask(handle.taskId);
     await waitForStatus(service, handle.taskId, "cancelling");
     releaseStart();

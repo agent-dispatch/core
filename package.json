@@ -1,6 +1,6 @@
 {
   "name": "@agent-dispatch/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Provider-neutral runtime contracts and dispatch orchestration for AgentDispatch.",
   "type": "module",
   "license": "Apache-2.0",

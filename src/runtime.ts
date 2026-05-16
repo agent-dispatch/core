@@ -197,6 +197,7 @@ export class RuntimeService {
         updatedAt: nowIso()
       });
       await this.store.appendEvent(this.event(task.id, "task.started", "Starting provider task."));
+      await this.store.updateTask(task.id, { status: "running", updatedAt: nowIso() });
 
       const started = await adapter.startTask({
         dispatch: request,
