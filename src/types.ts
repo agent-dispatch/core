@@ -253,6 +253,7 @@ export interface CloudAgentInteraction {
   providerRefs?: Record<string, unknown>;
   invocation?: ProviderInvocationDetails;
   a2a?: A2AInteractionDetails;
+  framework?: string;
   model?: unknown;
   tools?: Record<string, unknown>;
 }
