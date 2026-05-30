@@ -2,6 +2,16 @@
   "name": "@agent-dispatch/core",
   "version": "0.1.2",
   "description": "Provider-neutral runtime contracts and dispatch orchestration for AgentDispatch.",
+  "keywords": [
+    "agentdispatch",
+    "agents",
+    "mcp",
+    "model-context-protocol",
+    "cloud-agents",
+    "subagents",
+    "agent-orchestration",
+    "typescript"
+  ],
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
