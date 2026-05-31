@@ -19,8 +19,10 @@ npm run typecheck
 npm test
 npm run build
 npm version "$VERSION" --no-git-tag-version --allow-same-version
-npm publish --provenance --access public
+npm publish
 ```
+
+The package `publishConfig.access` keeps the scoped package public. npm Trusted Publisher generates provenance automatically from GitHub Actions when the npm package is configured for this repository and workflow.
 
 ## Update Dependents
 
