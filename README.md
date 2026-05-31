@@ -1,6 +1,7 @@
 # @agent-dispatch/core
 
 [![npm](https://img.shields.io/npm/v/@agent-dispatch/core.svg)](https://www.npmjs.com/package/@agent-dispatch/core)
+[![CI](https://github.com/agent-dispatch/core/actions/workflows/ci.yml/badge.svg)](https://github.com/agent-dispatch/core/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/@agent-dispatch/core.svg)](https://www.npmjs.com/package/@agent-dispatch/core)
 
 Provider-neutral runtime primitives for AgentDispatch: the MCP control plane that lets a lead agent spawn, monitor, and interact with cloud subagents without binding itself to one cloud API.
